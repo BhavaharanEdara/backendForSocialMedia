@@ -1,9 +1,6 @@
 const express = require("express");
 const cors = require("cors");
 const app = express();
-const dotenv = require('dotenv');
-
-dotenv.config();
 
 const { initializeDatabase } = require("./db/db.connect");
 const {User} = require("./models/user.model")
@@ -14,6 +11,21 @@ app.use(express.json());
 
 initializeDatabase();
 
+const verifyJwt = async(req, res, next) => {
+
+  const token = req.headers["authorization"];
+  if (!token) {
+    return res.status(401).json({ error: "No token found" });
+  }
+  try {
+    const decodedToken = await jwt.verify(token,process.env.JWT_SECRET)
+    req.user = decodedToken
+    next()
+  } catch (error) {
+    console.log(error);
+    res.status(402).json({error:"invalid token", err:error});
+  }
+};
 const getAllUsers = async()=>{
   try{
     const users = await User.find();
@@ -41,7 +53,7 @@ const createNewUser = async(data)=>{
     return savedUser
   }
   catch(error){
-    console.log(error)
+    console.log(error);
   }
 }
 
@@ -118,7 +130,7 @@ const addLikedPost = async(userId, postId)=>{
   }
 }
 
-app.put("/users/add_liked_post/:id", async(req,res)=>{
+app.put("/users/add_liked_post/:id", verifyJwt, async(req,res)=>{
   let id = req.body.id
   try{
     const user = await addLikedPost(req.params.id, id);
@@ -143,7 +155,7 @@ const removeLikedPost = async(userId,id)=>{
 }
 
 
-app.put("/users/remove_liked_post/:id", async(req,res)=>{
+app.put("/users/remove_liked_post/:id", verifyJwt, async(req,res)=>{
   let id = req.body.id
   try{
     const user = await removeLikedPost(req.params.id, id);
@@ -165,7 +177,7 @@ const addBookMark = async(userId, id)=>{
     console.log(error);
   }
 }
-app.put("/users/add_book_mark/:id", async(req,res)=>{
+app.put("/users/add_book_mark/:id", verifyJwt, async(req,res)=>{
   let id = req.body.id
   try{
     const user = await addBookMark(req.params.id, id);
@@ -190,7 +202,7 @@ const removeBookMark = async(userId, id)=>{
   }
 }
 
-app.put("/users/remove_book_mark/:id", async(req,res)=>{
+app.put("/users/remove_book_mark/:id", verifyJwt, async(req,res)=>{
   let id = req.body.id
   try{
     const user = await removeBookMark(req.params.id, id);
@@ -232,7 +244,7 @@ const unfollowUser = async( userId, followId)=>{
   }
 }
 
-app.put("/users/follow_user/:id", async(req,res)=>{
+app.put("/users/follow_user/:id", verifyJwt,async(req,res)=>{
   let id = req.body.id
   try{
     const user = await followUser(req.params.id, id);
@@ -244,7 +256,7 @@ app.put("/users/follow_user/:id", async(req,res)=>{
 
 })
 
-app.put("/users/unfollow_user/:id", async(req,res)=>{
+app.put("/users/unfollow_user/:id", verifyJwt,async(req,res)=>{
   let id = req.body.id
   try{
     const user = await unfollowUser(req.params.id, id);
@@ -256,7 +268,7 @@ app.put("/users/unfollow_user/:id", async(req,res)=>{
 
 })
 
-app.put("/users/:id", async(req,res)=>{
+app.put("/users/:id", verifyJwt,async(req,res)=>{
   try{
     const updatedUser = await updateUser(req.params.id,req.body);
     res.send(updatedUser)
@@ -266,15 +278,20 @@ app.put("/users/:id", async(req,res)=>{
   }
 })
 
+
+
+
 app.post("/login", async(req,res)=>{
   try{
     const user = await getUserByEmail(req.body.email);
     if(user && user.password===req.body.password){
-
-      res.send(user);
+      const { password } = req.body;
+      delete req.body.password;
+      const secret = process.env.JWT_SECRET
+      const token = jwt.sign(user.toObject(), secret, { expiresIn: "24h" });
+      res.send({user, token});
     }
     else{
-
       res.status(400).send({error: "Incorrect Email or Password"})
     }
   }
@@ -352,7 +369,7 @@ const updatePost = async(id, data)=>{
     console.log(error)
   }
 }
-app.put("/posts/edit/:id", async(req,res)=>{
+app.put("/posts/edit/:id",verifyJwt, async(req,res)=>{
   try{
     const updatedPost = await updatePost(req.params.id, req.body);
     res.send(updatedPost)
@@ -363,7 +380,7 @@ app.put("/posts/edit/:id", async(req,res)=>{
   }
 })
 
-app.put("/posts/like/:id",async(req,res)=>{
+app.put("/posts/like/:id",verifyJwt,async(req,res)=>{
   try{
     const updatedPost = await updatePost(req.params.id, req.body);
     res.send(updatedPost)
@@ -373,7 +390,7 @@ app.put("/posts/like/:id",async(req,res)=>{
   }
 })
 
-app.put("/posts/dislike/:id",async(req,res)=>{
+app.put("/posts/dislike/:id",verifyJwt,async(req,res)=>{
   try{
     const updatedPost = await updatePost(req.params.id, req.body);
     res.send(updatedPost)
@@ -393,7 +410,7 @@ const deletePost = async(id)=>{
   }
 }
 
-app.delete("/post/:id", async(req,res)=>{
+app.delete("/post/:id", verifyJwt,async(req,res)=>{
   try{
     const deletedPost = await deletePost(req.params.id);
     res.send(deletedPost)
